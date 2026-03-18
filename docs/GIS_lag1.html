@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>GIS for Thematic Mapping</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <style>
+    html,
+    body,
+    #cesiumContainer {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    }
+
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1;
+      background: rgba(38, 38, 38, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      color: white;
+      border: 1px solid #555;
+      width: 260px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #controls-content {
+      overflow-y: auto;
+      padding-right: 5px;
+      /* For scrollbar */
+    }
+
+    #controls label {
+      display: block;
+      margin-top: 12px;
+      font-weight: bold;
+    }
+
+    #controls input,
+    #controls select {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 4px;
+      background-color: #333;
+      border: 1px solid #666;
+      color: white;
+      border-radius: 4px;
+      padding: 5px;
+    }
+
+    #controls img {
+      max-width: 150px;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    #tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      z-index: 10000;
+      border: 1px solid #444;
+      max-width: 250px;
+    }
+
+    #messageArea {
+      margin-top: 15px;
+      padding: 8px;
+      font-size: 13px;
+      border-radius: 4px;
+      background-color: #444;
+      display: none;
+      word-wrap: break-word;
+      flex-shrink: 0;
+    }
+
+    #messageArea.error {
+      background-color: #7c2525;
+    }
+
+    #messageArea.info {
+      background-color: #255a7c;
+    }
+
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      right: 20px;
+      z-index: 10;
+      background: rgba(38, 38, 38, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #555;
+      color: white;
+      width: 220px;
+      font-family: sans-serif;
+    }
+
+    .legend-title {
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .gradient-bar {
+      height: 15px;
+      width: 100%;
+      background: linear-gradient(to right, blue 0%, lightgreen 75%, red 100%);
+      border-radius: 3px;
+      margin-bottom: 5px;
+    }
+
+    .legend-labels {
+      position: relative;
+      height: 15px;
+      font-size: 11px;
+      color: #ccc;
+    }
+
+    .legend-labels span {
+      position: absolute;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="controls">
+    <img src="images/logo_SIGMA.png" alt="Logo" />
+    <div id="controls-content">
+      <label>1. Selecciona Década:</label>
+      <select id="decadeSelect">
+        <option value="">-- Seleccionar --</option>
+        <option value="data/memoria_lag1/d1886_1896.csv">1886-1896</option>
+        <option value="data/memoria_lag1/d1896_1904.csv">1896-1904</option>
+        <option value="data/memoria_lag1/d1904_1914.csv">1904-1914</option>
+        <option value="data/memoria_lag1/d1914_1924.csv">1914-1924</option>
+        <option value="data/memoria_lag1/d1924_1934.csv">1924-1934</option>
+        <option value="data/memoria_lag1/d1934_1944.csv">1934-1944</option>
+        <option value="data/memoria_lag1/d1944_1954.csv">1944-1954</option>
+        <option value="data/memoria_lag1/d1954_1964.csv">1954-1964</option>
+        <option value="data/memoria_lag1/d1964_1974.csv">1964-1974</option>
+        <option value="data/memoria_lag1/d1974_1984.csv">1974-1984</option>
+        <option value="data/memoria_lag1/d1984_1994.csv">1984-1994</option>
+        <option value="data/memoria_lag1/d1994_2004.csv">1994-2004</option>
+        <option value="data/memoria_lag1/d2004_2014.csv">2004-2014</option>
+        <option value="data/memoria_lag1/d2014_2024.csv">2014-2024</option>
+      </select>
+
+
+      <div id="pointControls" style="display: none;">
+        <label>Autocorrelation Function:</label>
+        <select id="colorColumnSelect"></select>
+      </div>
+    </div>
+    <div id="messageArea"></div>
+  </div>
+  <div id="cesiumContainer"></div>
+
+  <!-- INICIO DE LA LEYENDA-->
+  <div id="legend" style="display: none;">
+    <div class="legend-title">Modo</div>
+    <div class="legend-scale">
+      <div class="gradient-bar"></div>
+      <div class="legend-labels">
+        <span style="left: 0%;"> -1 </span>
+        <span style="left: 75%; transform: translateX(-50%);"> 0.5 </span>
+        <span style="right: 0%;"> 1 </span>
+      </div>
+    </div>
+  </div>
+  <!-- FINDE LA LEYENDA-->
+
+  <div id="tooltip"></div>
+
+  <script>
+    const GISApp = {
+      state: {
+        pointData: [],
+        columnMappings: {
+          lat: null,
+          lon: null,
+          id: null,
+          color: null,
+        },
+        // --- NUEVO ESTADO ---
+        // Almacenará el mapa de { "valor_grupo": "color_hsl" }
+        groupColorMap: {},
+        hoveredEntity: null,
+        originalMaterial: null,
+        // --- FIN DE NUEVO ESTADO ---
+      },
+      elements: {
+        viewer: null,
+        pointDataSource: null,
+        decadeSelect: document.getElementById("decadeSelect"),
+        pointControls: document.getElementById("pointControls"),
+        colorColumnSelect: document.getElementById("colorColumnSelect"),
+        tooltip: document.getElementById("tooltip"),
+        messageArea: document.getElementById("messageArea"),
+      },
+      init() {
+        this.setupCesiumViewer();
+        this.attachEventListeners();
+        this.loadDefaultLayers();
+        this.loadInitialCSV();
+      },
+      setupCesiumViewer() {
+        this.elements.viewer = new Cesium.Viewer("cesiumContainer", {
+          terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+          baseLayerPicker: true,
+          animation: false,
+          timeline: false,
+          fullscreenButton: false,
+          homeButton: true,
+          geocoder: false,
+          sceneModePicker: true,
+          navigationHelpButton: false,
+          infoBox: false,
+          selectionIndicator: false,
+          scene3DOnly: false,
+        });
+        this.elements.viewer.scene.backgroundColor = Cesium.Color.BLACK;
+        this.elements.viewer.scene.skyBox.show = false;
+        this.elements.viewer.scene.skyAtmosphere.show = false;
+        this.elements.pointDataSource = new Cesium.CustomDataSource("points");
+        this.elements.viewer.dataSources.add(this.elements.pointDataSource);
+      },
+      async loadDefaultLayers() {
+        const layers = [
+          { url: "data/coastline_110m.geojson", color: Cesium.Color.CYAN, width: 2 },
+          { url: "data/known_tipping_regions.geojson", color: Cesium.Color.AZURE, width: 3, fillColor: Cesium.Color.fromAlpha(Cesium.Color.AZURE, 0.4) }
+        ];
+
+        for (const layer of layers) {
+          try {
+            const response = await fetch(layer.url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const geojson = await response.json();
+            const fillCol = layer.fillColor || Cesium.Color.fromAlpha(layer.color, 0.2);
+            const dataSource = await Cesium.GeoJsonDataSource.load(geojson, {
+              stroke: layer.color,
+              strokeWidth: layer.width,
+              fill: fillCol, // Optional light fill
+            });
+            this.elements.viewer.dataSources.add(dataSource);
+          } catch (error) {
+            console.warn(`No se pudo cargar la capa base ${layer.url}:`, error.message);
+          }
+        }
+      },
+      async loadInitialCSV() {
+        const initialCsvUrl = "data/memoria_lag1/d2014_2024.csv";
+        this.elements.decadeSelect.value = initialCsvUrl;
+        try {
+          const response = await fetch(initialCsvUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const content = await response.text();
+          this.processCSVContent(content, "lag1");
+        } catch (error) {
+          console.warn("No se pudo cargar el CSV inicial:", error.message);
+        }
+      },
+      attachEventListeners() {
+        this.elements.decadeSelect.addEventListener(
+          "change",
+          this.handleDecadeSelect.bind(this)
+        );
+        this.elements.colorColumnSelect.addEventListener(
+          "change",
+          this.handleColorColumnChange.bind(this)
+        );
+        this.elements.viewer.screenSpaceEventHandler.setInputAction(
+          (movement) => this.handleMouseMove(movement),
+          Cesium.ScreenSpaceEventType.MOUSE_MOVE
+        );
+      },
+      async handleDecadeSelect(e) {
+        const fileUrl = e.target.value;
+        if (!fileUrl) return;
+        try {
+          const response = await fetch(fileUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const content = await response.text();
+          this.processCSVContent(content, "lag1");
+        } catch (error) {
+          this.ui.showMessage(`Error al cargar ${fileUrl}: ${error.message}`, "error");
+        }
+      },
+      processCSVContent(content, defaultColorColumn = null) {
+        this.state.pointData = this.utils.parseCSV(content);
+        if (this.state.pointData.length === 0) {
+          this.ui.showMessage("No se pudieron leer datos del CSV.", "error");
+          return;
+        }
+        const headers = Object.keys(this.state.pointData[0]);
+        this.state.columnMappings.lat = headers.find((h) =>
+          h.includes("lat")
+        );
+        this.state.columnMappings.lon = headers.find((h) =>
+          h.includes("lon")
+        );
+        this.state.columnMappings.id =
+          headers.find((h) => h.includes("id")) || headers[0];
+        if (!this.state.columnMappings.lat || !this.state.columnMappings.lon) {
+          this.ui.showMessage(
+            "CSV debe contener columnas de 'latitud' y 'longitud'.",
+            "error"
+          );
+          return;
+        }
+        this.ui.populateSelect(this.elements.colorColumnSelect, headers);
+
+        // Use requested default column or default to the last column
+        let initialColorCol = headers[headers.length - 1];
+        if (defaultColorColumn) {
+          const lowerDefault = defaultColorColumn.toLowerCase();
+          if (headers.includes(lowerDefault)) {
+            initialColorCol = lowerDefault;
+          }
+        }
+        this.state.columnMappings.color = initialColorCol;
+        this.elements.colorColumnSelect.value = this.state.columnMappings.color;
+
+        this.generateGroupColorMap(this.state.columnMappings.color);
+
+        this.updateVisualization();
+        this.elements.viewer.zoomTo(this.elements.pointDataSource);
+        this.ui.showMessage(
+          `Cargados ${this.state.pointData.length} puntos.`,
+          "info"
+        );
+        this.elements.pointControls.style.display = "block";
+        // Dentro de processCSVContent, al final:
+        document.getElementById("legend").style.display = "block"; // leyenda
+      },
+
+      handleColorColumnChange(e) {
+        this.state.columnMappings.color = e.target.value;
+        // --- CAMBIO AQUÍ ---
+        // Regenerar el mapa de colores para la nueva columna seleccionada
+        this.generateGroupColorMap(this.state.columnMappings.color);
+        // --- FIN DE CAMBIO ---
+        this.updateVisualization();
+      },
+      handleMouseMove(movement) {
+        const pickedObject = this.elements.viewer.scene.pick(
+          movement.endPosition
+        );
+
+        // Restaurar estado del polígono anterior si ya no está en hover
+        if (this.state.hoveredEntity && (!Cesium.defined(pickedObject) || pickedObject.id !== this.state.hoveredEntity)) {
+          if (this.state.hoveredEntity.polygon && this.state.originalMaterial) {
+            this.state.hoveredEntity.polygon.material = this.state.originalMaterial;
+          }
+          this.state.hoveredEntity = null;
+          this.state.originalMaterial = null;
+        }
+
+        if (
+          Cesium.defined(pickedObject) &&
+          pickedObject.id &&
+          pickedObject.id.properties
+        ) {
+          const entity = pickedObject.id;
+          let props;
+          if (typeof entity.properties.getValue === 'function') {
+            props = entity.properties.getValue(this.elements.viewer.clock.currentTime);
+          } else {
+            props = entity.properties;
+          }
+
+          // Aclarar polígono si es de la capa de tipping regions
+          if (props && props.TIPPING_SYSTEM) {
+            if (this.state.hoveredEntity !== entity && entity.polygon) {
+              this.state.hoveredEntity = entity;
+              this.state.originalMaterial = entity.polygon.material;
+              entity.polygon.material = Cesium.Color.fromAlpha(Cesium.Color.WHITE, 0.7);
+            }
+          }
+
+          this.ui.updateTooltip(props, movement.endPosition);
+        } else {
+          this.elements.tooltip.style.display = "none";
+        }
+      },
+      updateVisualization() {
+        this.render.points();
+        const legendTitle = document.querySelector(".legend-title");
+        if (legendTitle) {
+          legendTitle.textContent = `ACF: ${this.state.columnMappings.color}`;
+        }
+      },
+
+      // --- NUEVA FUNCIÓN ---
+      /**
+       * Genera un mapa de colores para la columna dada.
+       * Azul (-1) -> LightGreen (0.5) -> Naranja (1).
+       * @param {string} columnName El nombre de la columna para agrupar.
+       */
+      generateGroupColorMap(columnName) {
+        this.state.groupColorMap = {};
+        if (!columnName || this.state.pointData.length === 0) return;
+
+        const uniqueValues = new Set(this.state.pointData.map(p => p[columnName]));
+
+        const colorBlue = Cesium.Color.fromCssColorString('blue');
+        const colorLightGreen = Cesium.Color.fromCssColorString('lightgreen');
+        const colorOrange = Cesium.Color.fromCssColorString('red');
+
+        uniqueValues.forEach(value => {
+          const num = parseFloat(value);
+
+          // Fallback for non-numeric strings
+          if (isNaN(num)) {
+            this.state.groupColorMap[value] = Cesium.Color.GRAY.withAlpha(0.5);
+            return;
+          }
+
+          let finalColor = new Cesium.Color();
+          if (num <= 0.5) {
+            // Map [-1, 0.5] to [0, 1]
+            let t = (num + 1) / 1.5;
+            t = Math.max(0, Math.min(1, t));
+            Cesium.Color.lerp(colorBlue, colorLightGreen, t, finalColor);
+          } else {
+            // Map [0.5, 1] to [0, 1]
+            let t = (num - 0.5) / 0.5;
+            t = Math.max(0, Math.min(1, t));
+            Cesium.Color.lerp(colorLightGreen, colorOrange, t, finalColor);
+          }
+
+          this.state.groupColorMap[value] = finalColor;
+        });
+      },
+
+      render: {
+        points() {
+          const app = GISApp;
+          app.elements.pointDataSource.entities.removeAll();
+
+          const { lat: latCol, lon: lonCol, id: idCol, color: colorCol } = app.state.columnMappings;
+          const colorMap = app.state.groupColorMap;
+
+          app.state.pointData.forEach((point, index) => {
+            const lat = app.utils.parseRobustFloat(point[latCol]);
+            const lon = app.utils.parseRobustFloat(point[lonCol]);
+            const colorValue = point[colorCol];
+
+            if (isNaN(lat) || isNaN(lon)) return;
+
+            // Use the pre-calculated Cesium Color object
+            const color = colorMap[colorValue] || Cesium.Color.GRAY;
+
+            app.elements.pointDataSource.entities.add({
+              id: `point_${index}`,
+              position: Cesium.Cartesian3.fromDegrees(lon, lat),
+              point: {
+                pixelSize: 8,
+                color: color,
+              },
+              properties: {
+                id: point[idCol],
+                colorColumn: colorCol,
+                colorValue: colorValue,
+                known_tipping_system: point["known_tipping_system"]
+              },
+            });
+          });
+        }
+      },
+      ui: {
+        showMessage(message, type = "info") {
+          const area = GISApp.elements.messageArea;
+          area.textContent = message;
+          area.className = type;
+          area.style.display = "block";
+        },
+        populateSelect(selectElement, options) {
+          selectElement.innerHTML = "";
+          options.forEach((option) => {
+            selectElement.add(new Option(option, option));
+          });
+        },
+        updateTooltip(properties, position) {
+          const app = GISApp;
+
+          if (properties.TIPPING_SYSTEM) {
+            app.elements.tooltip.style.display = "none";
+            return;
+          } else if (properties.id !== undefined) {
+            const { known_tipping_system } = properties;
+
+            // Si el dato existe, lo mostramos. Si no, podemos mostrar un mensaje por defecto.
+            let tooltipHTML = "";
+
+            if (known_tipping_system && known_tipping_system !== "") {
+              tooltipHTML = `<strong>Known Tipping System:</strong><br>${known_tipping_system}`;
+            } else {
+              tooltipHTML = `<em>Sin información de sistema</em>`;
+            }
+
+            app.elements.tooltip.innerHTML = tooltipHTML;
+            app.elements.tooltip.style.left = `${position.x + 15}px`;
+            app.elements.tooltip.style.top = `${position.y + 15}px`;
+            app.elements.tooltip.style.display = "block";
+          } else {
+            app.elements.tooltip.style.display = "none";
+          }
+        },
+      },
+      utils: {
+        async readFileAsText(file) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(file);
+          });
+        },
+        parseRobustFloat(str) {
+          if (typeof str !== "string") return NaN;
+          const cleaned = str.trim().replace(",", ".");
+          return parseFloat(cleaned);
+        },
+        parseCSV(content) {
+          const rows = content
+            .trim()
+            .split(/\r\n?|\n/)
+            .filter((row) => row.trim());
+          if (rows.length < 2) return [];
+          const headerRow = rows.shift();
+          const headers =
+            (headerRow.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []).map((h) =>
+              h.replace(/"/g, "").trim().toLowerCase()
+            ) || [];
+          return rows.map((row) => {
+            const values =
+              row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+            return headers.reduce((obj, header, i) => {
+              obj[header] = values[i]
+                ? values[i].replace(/"/g, "").trim()
+                : "";
+              return obj;
+            }, {});
+          });
+        },
+
+        // Función generateRandomHslColor eliminada debido a cambio a paleta secuencial.
+      },
+    };
+    GISApp.init();
+  </script>
+</body>
+
+</html>
