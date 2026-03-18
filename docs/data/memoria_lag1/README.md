@@ -1,0 +1,1 @@
+Autocorrelation Function Data
